@@ -29,25 +29,25 @@ def main():
     uncond = grf.simulate(variogram, nx, dx, ny, dy)
     uncond_2d = np.array(uncond).reshape((nx, ny), order='F')
     cond_seed_42 = grf.conditional_simulate(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc, n=1, seed=42
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc, n=1, seed=42
     )[0]
     cond_seed_123 = grf.conditional_simulate(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc, n=1, seed=123
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc, n=1, seed=123
     )[0]
 
     # Preserve the "average of many conditional realizations" point.
     n_realizations = 100
     cond_stack = grf.conditional_simulate(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc, n=n_realizations
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc, n=n_realizations
     )
     avg_cond = np.mean(cond_stack, axis=0)
 
     # Two prediction setups: mean=unconditional and mean=0.
     pred_with_uncond, _std_with_uncond = grf.predict(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc, mean=uncond_2d
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc, mean=uncond_2d
     )
     pred_zero_mean, std_zero_mean = grf.predict(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc,
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc,
         mean=0.0, calculate_stddev=True
     )
 

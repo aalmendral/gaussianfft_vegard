@@ -262,49 +262,10 @@ gaussianfft.conditional_simulate
 """
 
 
-@overload
 def conditional_simulate(
         variogram: Variogram,
-        nx: int,
-        dx: float,
-        obs_locations: ndarray,
-        obs_values: ndarray,
-        obs_uncertainties: ndarray,
-        *,
-        mean: Union[float, ndarray] = 0.0,
-        n: int = 1,
-        seed: Optional[int] = None,
-        method: str = 'SimpleKriging',
-) -> list[ndarray]:...
-
-
-@overload
-def conditional_simulate(
-        variogram: Variogram,
-        nx: int,
-        dx: float,
-        ny: int,
-        dy: float,
-        obs_locations: ndarray,
-        obs_values: ndarray,
-        obs_uncertainties: ndarray,
-        *,
-        mean: Union[float, ndarray] = 0.0,
-        n: int = 1,
-        seed: Optional[int] = None,
-        method: str = 'SimpleKriging',
-) -> list[ndarray]:...
-
-
-@overload
-def conditional_simulate(
-        variogram: Variogram,
-        nx: int,
-        dx: float,
-        ny: int,
-        dy: float,
-        nz: int,
-        dz: float,
+        grid_shape: tuple[int, ...],
+        grid_spacing: tuple[float, ...],
         obs_locations: ndarray,
         obs_values: ndarray,
         obs_uncertainties: ndarray,
@@ -321,12 +282,11 @@ Parameters
 ----------
 variogram: Variogram
     An instance of gaussianfft.Variogram.
-nx, ny, nz: int
-    Grid size in x, y, z directions. Only nx is required. Setting ny and/or nz
-    to a value less than or equal to 1 reduces the dimension.
-dx, dy, dz: float
-    Grid resolution in x, y, z directions. dx is always required. dy and dz are
-    required if respectively ny and nz are greater than 1.
+grid_shape: tuple of int
+    Grid sizes in x, y, z order, with 1 to 3 entries. Trailing sizes of 1
+    reduce the output dimensionality.
+grid_spacing: tuple of float
+    Grid resolution along each axis, with the same length as grid_shape.
 obs_locations: ndarray
     Array of shape (N, ndims) with observation coordinates.
 obs_values: ndarray
@@ -355,52 +315,18 @@ gaussianfft.predict
 """
 
 
-@overload
 def predict(
         variogram: Variogram,
-        nx: int,
-        dx: float,
+        grid_shape: tuple[int, ...],
+        grid_spacing: tuple[float, ...],
         obs_locations: ndarray,
         obs_values: ndarray,
         obs_uncertainties: ndarray,
         *,
         mean: Union[float, ndarray] = 0.0,
         method: str = 'SimpleKriging',
-) -> tuple[ndarray, ndarray]:...
-
-
-@overload
-def predict(
-        variogram: Variogram,
-        nx: int,
-        dx: float,
-        ny: int,
-        dy: float,
-        obs_locations: ndarray,
-        obs_values: ndarray,
-        obs_uncertainties: ndarray,
-        *,
-        mean: Union[float, ndarray] = 0.0,
-        method: str = 'SimpleKriging',
-) -> tuple[ndarray, ndarray]:...
-
-
-@overload
-def predict(
-        variogram: Variogram,
-        nx: int,
-        dx: float,
-        ny: int,
-        dy: float,
-        nz: int,
-        dz: float,
-        obs_locations: ndarray,
-        obs_values: ndarray,
-        obs_uncertainties: ndarray,
-        *,
-        mean: Union[float, ndarray] = 0.0,
-        method: str = 'SimpleKriging',
-) -> tuple[ndarray, ndarray]:
+        calculate_stddev: bool = False,
+) -> tuple[ndarray, Optional[ndarray]]:
     """
 Returns the kriging mean and standard deviation over the grid.
 
@@ -408,10 +334,11 @@ Parameters
 ----------
 variogram: Variogram
     An instance of gaussianfft.Variogram.
-nx, ny, nz: int
-    Grid size in x, y, z directions. Only nx is required.
-dx, dy, dz: float
-    Grid resolution in x, y, z directions.
+grid_shape: tuple of int
+    Grid sizes in x, y, z order, with 1 to 3 entries. Trailing sizes of 1
+    reduce the output dimensionality.
+grid_spacing: tuple of float
+    Grid resolution along each axis, with the same length as grid_shape.
 obs_locations: ndarray
     Array of shape (N, ndims) with observation coordinates.
 obs_values: ndarray
@@ -423,10 +350,13 @@ mean: float or ndarray, optional
     match the grid shape. Default is 0.0.
 method: str, optional
     Kriging method. One of 'SimpleKriging' (default) or 'OrdinaryKriging'.
+calculate_stddev: bool, optional
+    Whether to calculate the standard deviation. Default is False.
 
 Returns
 -------
 out: tuple of (mean_field, stdev_field)
-    Both arrays shaped (nx,), (nx, ny), or (nx, ny, nz).
+    Arrays shaped (nx,), (nx, ny), or (nx, ny, nz). stdev_field is None
+    when calculate_stddev is False.
 """
     ...

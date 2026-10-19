@@ -34,11 +34,11 @@ def main():
 
     # Two conditional simulations
     sim_a = grf.conditional_simulate(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc,
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc,
         n=1, seed=42, method='OrdinaryKriging',
     )[0]
     sim_b = grf.conditional_simulate(
-        variogram, nx, dx, ny, dy, obs_pt, obs_val, obs_unc,
+        variogram, (nx, ny), (dx, dy), obs_pt, obs_val, obs_unc,
         n=1, seed=123, method='OrdinaryKriging',
     )[0]
 

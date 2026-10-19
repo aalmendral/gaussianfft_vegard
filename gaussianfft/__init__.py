@@ -36,17 +36,29 @@ __all__ = [
 ]
 
 
-def conditional_simulate(variogram, nx, dx, *args, mean=0.0, n=1, seed=None, method='SimpleKriging', **kwargs):
+def conditional_simulate(
+        variogram, grid_shape: tuple[int, ...], grid_spacing: tuple[float, ...],
+        obs_locations, obs_values, obs_uncertainties, *,
+        mean=0.0, n=1, seed=None, method='SimpleKriging',
+):
+    """Generate conditional fields using shape and spacing tuples in x, y, z order."""
     if seed is not None:
         _gaussianfft.seed(seed)
     from gaussianfft._kriging import simulate as _kriging_simulate
     return _kriging_simulate(
-        variogram, nx, dx, *args, mean=mean, n_sim=n, method=method, **kwargs,
+        variogram, grid_shape, grid_spacing, obs_locations, obs_values, obs_uncertainties,
+        mean=mean, n_sim=n, method=method,
     )
 
 
-def predict(variogram, nx, dx, *args, mean=0.0, method='SimpleKriging', **kwargs):
+def predict(
+        variogram, grid_shape: tuple[int, ...], grid_spacing: tuple[float, ...],
+        obs_locations, obs_values, obs_uncertainties, *,
+        mean=0.0, method='SimpleKriging', calculate_stddev=False,
+):
+    """Predict a field using shape and spacing tuples in x, y, z order."""
     from gaussianfft._kriging import predict as _kriging_predict
     return _kriging_predict(
-        variogram, nx, dx, *args, mean=mean, method=method, **kwargs,
+        variogram, grid_shape, grid_spacing, obs_locations, obs_values, obs_uncertainties,
+        mean=mean, method=method, calculate_stddev=calculate_stddev,
     )
