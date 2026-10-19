@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import map_coordinates
 import gaussianfft as grf
+from gaussianfft._kriging.kriging_data import KrigingData
 from gaussianfft._kriging.kriging_toolkit import OrdinaryKriging
 
 
@@ -26,7 +27,8 @@ def main():
     obs_unc = np.array([0.0, 0.0, 0.0])
 
     # Ordinary kriging prediction
-    ok = OrdinaryKriging(variogram, nx, dx, ny, dy, 1, 1.0, obs_pt, obs_val, obs_unc)
+    data = KrigingData(variogram, nx, dx, ny, dy, 1, 1.0, obs_pt, obs_val, obs_unc)
+    ok = OrdinaryKriging(data)
     pred_mean, pred_std = ok.predict(calculate_stddev=True)
     estimated_mean = ok.estimated_mean
 

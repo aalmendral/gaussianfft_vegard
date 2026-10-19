@@ -2,6 +2,7 @@ from typing import Union
 
 from numpy import ndarray
 
+from gaussianfft._kriging.kriging_data import KrigingData
 from gaussianfft._kriging.kriging_toolkit import SimpleKriging, OrdinaryKriging
 
 __all__ = ['predict', 'simulate']
@@ -19,12 +20,12 @@ def _build_kriging(method, variogram, nx, dx, ny, dy, nz, dz,
         raise ValueError(
             f"Unknown kriging method: {method!r}. Choose from {list(_METHODS)}"
         )
+    data = KrigingData(variogram, nx, dx, ny, dy, nz, dz,
+                       obs_locations, obs_values, obs_uncertainties)
     if method == 'SimpleKriging':
-        return cls(variogram, nx, dx, ny, dy, nz, dz,
-                   obs_locations, obs_values, obs_uncertainties, mean=mean)
+        return SimpleKriging(data, mean=mean)
     elif method == 'OrdinaryKriging':
-        return cls(variogram, nx, dx, ny, dy, nz, dz,
-                   obs_locations, obs_values, obs_uncertainties)
+        return OrdinaryKriging(data)
     else:
         raise ValueError(f"Unsupported kriging method: {method!r}")
 
