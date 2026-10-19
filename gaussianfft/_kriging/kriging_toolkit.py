@@ -51,6 +51,14 @@ def _build_obs_cov_matrix(variogram, obs_locations, obs_uncertainties):
     return cov
 
 
+def _cholesky_factor(cov):
+    """Factorize an observation covariance matrix, reporting non-positive definiteness."""
+    try:
+        return scipy.linalg.cho_factor(cov)
+    except scipy.linalg.LinAlgError as exc:
+        raise FactorizationError() from exc
+
+
 def _chunk_size(n_grid, n_obs):
     """Grid points per batch so peak working memory stays within _MEMORY_BUDGET_BYTES.
 
@@ -110,10 +118,7 @@ class SimpleKriging:
             )
 
         cov = _build_obs_cov_matrix(data.variogram, data.obs_locations, data.obs_uncertainties)
-        try:
-            self._cho_factor = scipy.linalg.cho_factor(cov)
-        except scipy.linalg.LinAlgError as exc:
-            raise FactorizationError() from exc
+        self._cho_factor = _cholesky_factor(cov)
 
         self._grid_coords = _grid_coordinates(
             data.nx, data.dx, data.ny, data.dy, data.nz, data.dz, data.ndims
@@ -197,10 +202,7 @@ class OrdinaryKriging:
         self._data = data
 
         cov = _build_obs_cov_matrix(data.variogram, data.obs_locations, data.obs_uncertainties)
-        try:
-            self._cho_factor = scipy.linalg.cho_factor(cov)
-        except scipy.linalg.LinAlgError as exc:
-            raise FactorizationError() from exc
+        self._cho_factor = _cholesky_factor(cov)
 
         self._grid_coords = _grid_coordinates(
             data.nx, data.dx, data.ny, data.dy, data.nz, data.dz, data.ndims
