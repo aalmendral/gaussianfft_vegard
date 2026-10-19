@@ -8,6 +8,7 @@ if platform.python_implementation() == 'PyPy':
 
 import gaussianfft as grf
 from gaussianfft._kriging import predict
+from gaussianfft._kriging.kriging_data import KrigingData
 from gaussianfft._kriging.kriging_toolkit import OrdinaryKriging
 
 
@@ -401,10 +402,11 @@ class TestOrdinaryKriging1D:
         obs_values = np.full(3, 4.0)
         obs_uncertainties = np.zeros(3)
 
-        ok = OrdinaryKriging(
+        data = KrigingData(
             self.variogram, self.nx, self.dx, 1, 1.0, 1, 1.0,
             obs_locations, obs_values, obs_uncertainties,
         )
+        ok = OrdinaryKriging(data)
 
         assert abs(ok.estimated_mean - 4.0) < 1e-6
 

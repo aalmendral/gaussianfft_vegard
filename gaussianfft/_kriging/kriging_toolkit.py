@@ -63,14 +63,11 @@ def _chunk_size(n_grid, n_obs):
     return min(n_grid, max(1, _MEMORY_BUDGET_BYTES // (arrays_per_chunk * n_obs * 8)))
 
 
-def _build_cov_chunk(variogram, grid_coords, start, end, obs_locations):
-    """Cross-covariance K[start:end, :] between a chunk of grid points and all obs."""
-    chunk = grid_coords[start:end]   # (chunk_size, ndims)
-    n_obs = len(obs_locations)
-    cov = np.empty((end - start, n_obs))
-    for j in range(n_obs):
-        dists = chunk - obs_locations[j]
-        cov[:, j] = variogram.corr_array(dists)
+def _build_cross_cov_matrix(variogram, grid_coords, obs_locations):
+    """Cross-covariance between supplied grid points and observations."""
+    cov = np.empty((len(grid_coords), len(obs_locations)))
+    for j, obs_location in enumerate(obs_locations):
+        cov[:, j] = variogram.corr_array(grid_coords - obs_location)
     return cov
 
 
@@ -160,8 +157,11 @@ class SimpleKriging:
         variance_flat = np.empty(n_grid) if calculate_stddev else None
         for start in range(0, n_grid, chunk):
             end = min(start + chunk, n_grid)
-            K = _build_cov_chunk(self._data.variogram, self._grid_coords, start, end,
-                                 self._data.obs_locations)  # (cs, n_obs)
+            K = _build_cross_cov_matrix(
+                self._data.variogram,
+                self._grid_coords[start:end],
+                self._data.obs_locations,
+            )
             correction_flat[start:end] = K @ weights
             if calculate_stddev:
                 alpha = scipy.linalg.cho_solve(self._cho_factor, K.T)     # (n_obs, cs)
@@ -249,11 +249,9 @@ class OrdinaryKriging:
         variance_flat = np.empty(n_grid) if calculate_stddev else None
         for start in range(0, n_grid, chunk):
             end = min(start + chunk, n_grid)
-            K = _build_cov_chunk(
+            K = _build_cross_cov_matrix(
                 self._data.variogram,
-                self._grid_coords,
-                start,
-                end,
+                self._grid_coords[start:end],
                 self._data.obs_locations,
             )
             w, drift = self._ok_weights_chunk(K)
