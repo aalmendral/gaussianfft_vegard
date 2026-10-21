@@ -7,9 +7,7 @@ if platform.python_implementation() == 'PyPy':
     pytest.skip('Kriging requires SciPy, which is unavailable on PyPy', allow_module_level=True)
 
 import gaussianfft as grf
-from gaussianfft._kriging import predict
-from gaussianfft._kriging.kriging_data import KrigingData
-from gaussianfft._kriging.kriging_toolkit import OrdinaryKriging
+from gaussianfft._kriging import ObservationData, OrdinaryKriging, predict
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +26,7 @@ class TestSimpleKriging1D:
         obs_uncertainties = np.array([0.0, 0.0, 0.0])
 
         mean_field, variance_field = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
         )
 
@@ -44,7 +42,7 @@ class TestSimpleKriging1D:
         obs_uncertainties = np.array([0.0, 0.0, 0.0])
 
         _, stdev_field = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             calculate_stddev=True,
         )
@@ -60,7 +58,7 @@ class TestSimpleKriging1D:
         obs_uncertainties = np.array([0.0])
 
         _, stdev_field = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             calculate_stddev=True,
         )
@@ -76,7 +74,7 @@ class TestSimpleKriging1D:
         obs_uncertainties = np.array([0.0])
 
         mean_field, _ = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             mean=3.0,
         )
@@ -96,7 +94,7 @@ class TestSimpleKriging1D:
 
         n_sims = 100
         sims = grf.conditional_simulate(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             n=n_sims,
         )
@@ -118,14 +116,14 @@ class TestSimpleKriging1D:
         obs_uncertainties = np.array([0.0])
 
         _, kriging_std = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             calculate_stddev=True,
         )
 
         n_sims = 200
         sims = grf.conditional_simulate(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             n=n_sims,
         )
@@ -156,9 +154,8 @@ class TestSimpleKriging2D:
         obs_uncertainties = np.array([0.0, 0.0])
 
         mean_field, _ = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx, self.ny), (self.dx, self.dy),
             obs_locations, obs_values, obs_uncertainties,
-            ny=self.ny, dy=self.dy,
             calculate_stddev=False,
         )
 
@@ -176,10 +173,9 @@ class TestSimpleKriging2D:
         obs_uncertainties = np.array([0.0])
 
         _, stddev_field = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx, self.ny), (self.dx, self.dy),
             obs_locations, obs_values, obs_uncertainties,
-            ny=self.ny, dy=self.dy,
-            calculate_stddev=True,  
+            calculate_stddev=True,
         )
 
         ix = int(round(25.0 / self.dx))
@@ -188,15 +184,15 @@ class TestSimpleKriging2D:
         # Corner should have higher stdev
         assert stddev_field[0, 0] > stddev_field[ix, iy]
 
-    def test_conditional_simulation_with_array_mean(self):
+    def test_conditional_simulation_with_scalar_mean(self):
         grf.seed(123)
         obs_locations = np.array([[25.0, 25.0], [50.0, 50.0]])
         obs_values = np.array([1.5, -1.0])
         obs_uncertainties = np.array([0.0, 0.0])
-        mean = np.zeros((self.nx, self.ny))
+        mean = 2.0
 
         sims = grf.conditional_simulate(
-            self.variogram, self.nx, self.dx, self.ny, self.dy,
+            self.variogram, (self.nx, self.ny), (self.dx, self.dy),
             obs_locations, obs_values, obs_uncertainties,
             mean=mean, n=1,
         )
@@ -222,9 +218,8 @@ class TestSimpleKriging3D:
         obs_uncertainties = np.array([0.0])
 
         mean_field, _ = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx, self.ny, self.nz), (self.dx, self.dy, self.dz),
             obs_locations, obs_values, obs_uncertainties,
-            ny=self.ny, dy=self.dy, nz=self.nz, dz=self.dz,
         )
 
         assert mean_field.shape == (self.nx, self.ny, self.nz)
@@ -245,7 +240,7 @@ class TestInputValidation:
         obs_uncertainties = np.array([0.0, 0.0])
 
         with pytest.raises(ValueError, match="obs_values"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties)
 
     def test_shape_mismatch_uncertainties(self):
         obs_locations = np.array([[10.0], [20.0]])
@@ -253,7 +248,7 @@ class TestInputValidation:
         obs_uncertainties = np.array([0.0])  # Wrong shape
 
         with pytest.raises(ValueError, match="obs_uncertainties"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties)
 
     def test_negative_uncertainties(self):
         obs_locations = np.array([[10.0], [20.0]])
@@ -261,24 +256,26 @@ class TestInputValidation:
         obs_uncertainties = np.array([0.1, -0.1])  # Negative
 
         with pytest.raises(ValueError, match="non-negative"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties)
 
-    def test_obs_out_of_bounds(self):
+    def test_simulation_obs_out_of_bounds(self):
         obs_locations = np.array([[300.0]])  # Beyond grid (50 * 5.0 = 245 max)
         obs_values = np.array([1.0])
         obs_uncertainties = np.array([0.0])
 
         with pytest.raises(ValueError, match="outside grid bounds"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties)
+            grf.conditional_simulate(
+                self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties,
+            )
 
-    def test_array_mean_shape_mismatch(self):
+    def test_array_mean_rejected(self):
         obs_locations = np.array([[10.0]])
         obs_values = np.array([1.0])
         obs_uncertainties = np.array([0.0])
         mean = np.zeros((2, 2))
 
         with pytest.raises(ValueError, match="mean"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties, mean=mean)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties, mean=mean)
 
     def test_unexpected_keyword_argument(self):
         obs_locations = np.array([[10.0]])
@@ -286,15 +283,15 @@ class TestInputValidation:
         obs_uncertainties = np.array([0.0])
 
         with pytest.raises(TypeError, match="unexpected keyword argument"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties, typo=True)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties, typo=True)
 
-    def test_partial_keyword_grid_rejected(self):
+    def test_mismatched_grid_spacing_rejected(self):
         obs_locations = np.array([[10.0]])
         obs_values = np.array([1.0])
         obs_uncertainties = np.array([0.0])
 
-        with pytest.raises(TypeError, match="ny must be provided"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties, dy=5.0)
+        with pytest.raises(ValueError, match="same length"):
+            predict(self.variogram, (50, 20), (5.0,), obs_locations, obs_values, obs_uncertainties)
 
     def test_wrong_ndims_in_locations(self):
         # 1D grid but 2D observation locations
@@ -303,7 +300,7 @@ class TestInputValidation:
         obs_uncertainties = np.array([0.0])
 
         with pytest.raises(ValueError, match="columns"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties)
 
     def test_1d_obs_locations_rejected(self):
         obs_locations = np.array([10.0, 20.0])  # 1D array, needs to be 2D
@@ -311,7 +308,7 @@ class TestInputValidation:
         obs_uncertainties = np.array([0.0, 0.0])
 
         with pytest.raises(ValueError, match="2D"):
-            predict(self.variogram, 50, 5.0, obs_locations, obs_values, obs_uncertainties)
+            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties)
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +323,7 @@ class TestOrdinaryKriging1D:
 
     def _predict(self, obs_locations, obs_values, obs_uncertainties, **kwargs):
         return predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             method='OrdinaryKriging', **kwargs,
         )
@@ -383,7 +380,7 @@ class TestOrdinaryKriging1D:
         obs_uncertainties = np.array([0.0, 0.0])
 
         sims = grf.conditional_simulate(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
             n=50, method='OrdinaryKriging',
         )
@@ -402,11 +399,8 @@ class TestOrdinaryKriging1D:
         obs_values = np.full(3, 4.0)
         obs_uncertainties = np.zeros(3)
 
-        data = KrigingData(
-            self.variogram, self.nx, self.dx, 1, 1.0, 1, 1.0,
-            obs_locations, obs_values, obs_uncertainties,
-        )
-        ok = OrdinaryKriging(data)
+        obs = ObservationData(obs_locations, obs_values, obs_uncertainties)
+        ok = OrdinaryKriging().fit(obs, self.variogram)
 
         assert abs(ok.estimated_mean - 4.0) < 1e-6
 
@@ -422,9 +416,9 @@ class TestOrdinaryKriging2D:
         obs_uncertainties = np.array([0.0, 0.0])
 
         mean_field, _ = predict(
-            self.variogram, self.nx, self.dx,
+            self.variogram, (self.nx, self.ny), (self.dx, self.dy),
             obs_locations, obs_values, obs_uncertainties,
-            ny=self.ny, dy=self.dy, method='OrdinaryKriging',
+            method='OrdinaryKriging',
         )
 
         assert mean_field.shape == (self.nx, self.ny)
@@ -447,7 +441,7 @@ class TestMethodDispatch:
         self.obs_uncertainties = np.array([0.0, 0.0])
 
     def _args(self):
-        return (self.variogram, self.nx, self.dx,
+        return (self.variogram, (self.nx,), (self.dx,),
                 self.obs_locations, self.obs_values, self.obs_uncertainties)
 
     def test_default_is_simple_kriging(self):
