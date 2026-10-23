@@ -28,7 +28,8 @@ def main():
     # Ordinary kriging prediction
     grid = GridSpec((nx, ny), (dx, dy))
     obs = ObservationData(obs_pt, obs_val, obs_unc)
-    ok = OrdinaryKriging().fit(obs, variogram)
+    ok = OrdinaryKriging()
+    ok.fit(obs, variogram)
     pred_mean, pred_std = ok.predict(grid, calculate_stddev=True)
     estimated_mean = ok.estimated_mean
 

@@ -18,7 +18,8 @@ def _build_kriging(method, obs, variogram, mean):
         estimator = cls(mean=mean)
     else:
         estimator = cls()
-    return estimator.fit(obs, variogram)
+    estimator.fit(obs, variogram)
+    return estimator
 
 
 def predict(

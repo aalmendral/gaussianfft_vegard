@@ -38,17 +38,19 @@ observations = ObservationData(
    uncertainties=np.zeros(2),
 )
 grid = GridSpec(shape=(100, 80), spacing=(2.0, 2.0))
-model = SimpleKriging(mean=0.0).fit(observations, variogram)
+model = SimpleKriging(mean=0.0)
+model.fit(observations, variogram)
 prediction, stddev = model.predict(grid, calculate_stddev=True)
 grf.seed(42)
 realizations = model.simulate(grid, n_sim=3)
 ```
 
 `fit` takes an already-configured `gaussianfft.Variogram`; it does not estimate
-variogram parameters. `OrdinaryKriging().fit(observations, variogram)` instead
-estimates an unknown constant mean, available as `estimated_mean` after fitting.
+variogram parameters and returns `None`. Construct the estimator before calling
+`fit`. `OrdinaryKriging` estimates an unknown constant mean during `fit`, available
+as `estimated_mean` afterwards.
 Both classes implement the `Kriging` ABC and directly store their observation
-data, variogram, and Cholesky factor. They snapshot the observation arrays and reuse the factor
+data, variogram, and Cholesky factor. They retain the supplied observation data and reuse the factor
 across predictions and simulations. Call `fit` again to use changed observations,
 uncertainties, or variogram parameters.
 

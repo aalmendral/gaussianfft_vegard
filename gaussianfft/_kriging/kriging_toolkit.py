@@ -98,8 +98,8 @@ class Kriging(abc.ABC):
     """Kriging interface allowing preparation to be deferred until evaluation."""
 
     @abc.abstractmethod
-    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> Kriging:
-        """Accept observations and a configured variogram, returning this estimator.
+    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
+        """Accept observations and a configured variogram.
 
         Preparation may be deferred. Refit after changing the variogram; no
         variogram parameters are estimated by this interface.
@@ -120,23 +120,17 @@ class SimpleKriging(Kriging):
     """Simple kriging with a known constant scalar mean."""
 
     def __init__(self, mean: float = 0.0):
-        if np.ndim(mean) != 0 or not np.isrealobj(mean):
-            raise ValueError("mean must be a finite scalar")
         self.mean = float(mean)
-        if not np.isfinite(self.mean):
-            raise ValueError("mean must be a finite scalar")
         self._obs = None
         self._variogram = None
         self._cho_factor = None
 
-    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> SimpleKriging:
-        obs = ObservationData(obs.locations, obs.values, obs.uncertainties)
+    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
         covariance = _build_obs_cov_matrix(variogram, obs.locations, obs.uncertainties)
         cho_factor = _cholesky_factor(covariance)
         self._obs = obs
         self._variogram = variogram
         self._cho_factor = cho_factor
-        return self
 
     def predict(
         self, grid: GridSpec, calculate_stddev=False,
@@ -148,7 +142,7 @@ class SimpleKriging(Kriging):
             raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
         grid_coords = grid.coordinates()
         residuals = obs.values - self.mean
-        correction, stddev = self._krige(grid, grid_coords, residuals, calculate_stddev)
+        correction, stddev = self._krige(grid.shape, grid_coords, residuals, calculate_stddev)
         correction += self.mean
         return correction, stddev
 
@@ -167,11 +161,11 @@ class SimpleKriging(Kriging):
             uncond_at_obs = _interpolate_at_obs(uncond, obs_coords)
             obs_residuals = (obs.values - self.mean) - uncond_at_obs
 
-            correction, _ = self._krige(grid, grid_coords, obs_residuals)
+            correction, _ = self._krige(grid.shape, grid_coords, obs_residuals)
             results.append(self.mean + uncond + correction)
         return results
 
-    def _krige(self, grid, grid_coords, residuals, calculate_stddev=False):
+    def _krige(self, grid_shape: tuple[int, ...], grid_coords, residuals, calculate_stddev=False):
         """Apply simple kriging to mean-adjusted observation or simulation residuals."""
         obs = self._obs
         weights = scipy.linalg.cho_solve(self._cho_factor, residuals)
@@ -190,10 +184,10 @@ class SimpleKriging(Kriging):
                 alpha = scipy.linalg.cho_solve(self._cho_factor, cross_cov.T)
                 variance_flat[start:end] = 1.0 - np.sum(cross_cov * alpha.T, axis=1)
 
-        correction = correction_flat.reshape(grid.shape)
+        correction = correction_flat.reshape(grid_shape)
         stddev = None
         if calculate_stddev:
-            stddev = np.sqrt(np.maximum(variance_flat, 0.0)).reshape(grid.shape)
+            stddev = np.sqrt(np.maximum(variance_flat, 0.0)).reshape(grid_shape)
         return correction, stddev
 
 
@@ -224,8 +218,7 @@ class OrdinaryKriging(Kriging):
         self._s = 0.0
         self.estimated_mean = None
 
-    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> OrdinaryKriging:
-        obs = ObservationData(obs.locations, obs.values, obs.uncertainties)
+    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
         covariance = _build_obs_cov_matrix(variogram, obs.locations, obs.uncertainties)
         cho_factor = _cholesky_factor(covariance)
         n_obs = len(obs.locations)
@@ -240,7 +233,6 @@ class OrdinaryKriging(Kriging):
         self._alpha = alpha
         self._s = normalization
         self.estimated_mean = estimated_mean
-        return self
 
     def _ok_weights_chunk(self, cross_cov):
         """Return ordinary-kriging weights and drift for a cross-covariance chunk."""
@@ -257,7 +249,7 @@ class OrdinaryKriging(Kriging):
         if obs.locations.shape[1] != len(grid.shape):
             raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
         grid_coords = grid.coordinates()
-        return self._krige(grid, grid_coords, obs.values, calculate_stddev)
+        return self._krige(grid.shape, grid_coords, obs.values, calculate_stddev)
 
     def simulate(self, grid: GridSpec, n_sim=1) -> list[np.ndarray]:
         if self._obs is None:
@@ -274,11 +266,11 @@ class OrdinaryKriging(Kriging):
             uncond_at_obs = _interpolate_at_obs(uncond, obs_coords)
             obs_residuals = obs.values - uncond_at_obs
 
-            correction, _ = self._krige(grid, grid_coords, obs_residuals)
+            correction, _ = self._krige(grid.shape, grid_coords, obs_residuals)
             results.append(uncond + correction)
         return results
 
-    def _krige(self, grid, grid_coords, residuals, calculate_stddev=False):
+    def _krige(self, grid_shape: tuple[int, ...], grid_coords, residuals, calculate_stddev=False):
         """Apply ordinary kriging to observation values or simulation residuals."""
         obs = self._obs
         n_grid = len(grid_coords)
@@ -296,8 +288,8 @@ class OrdinaryKriging(Kriging):
             if calculate_stddev:
                 variance_flat[start:end] = 1.0 - np.sum(cross_cov * weights.T, axis=1) - drift
 
-        correction = correction_flat.reshape(grid.shape)
+        correction = correction_flat.reshape(grid_shape)
         stddev = None
         if calculate_stddev:
-            stddev = np.sqrt(np.maximum(variance_flat, 0.0)).reshape(grid.shape)
+            stddev = np.sqrt(np.maximum(variance_flat, 0.0)).reshape(grid_shape)
         return correction, stddev

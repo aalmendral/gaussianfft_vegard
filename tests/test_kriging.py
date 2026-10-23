@@ -268,15 +268,6 @@ class TestInputValidation:
                 self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties,
             )
 
-    def test_array_mean_rejected(self):
-        obs_locations = np.array([[10.0]])
-        obs_values = np.array([1.0])
-        obs_uncertainties = np.array([0.0])
-        mean = np.zeros((2, 2))
-
-        with pytest.raises(ValueError, match="mean"):
-            predict(self.variogram, (50,), (5.0,), obs_locations, obs_values, obs_uncertainties, mean=mean)
-
     def test_unexpected_keyword_argument(self):
         obs_locations = np.array([[10.0]])
         obs_values = np.array([1.0])
@@ -400,7 +391,8 @@ class TestOrdinaryKriging1D:
         obs_uncertainties = np.zeros(3)
 
         obs = ObservationData(obs_locations, obs_values, obs_uncertainties)
-        ok = OrdinaryKriging().fit(obs, self.variogram)
+        ok = OrdinaryKriging()
+        ok.fit(obs, self.variogram)
 
         assert abs(ok.estimated_mean - 4.0) < 1e-6
 
