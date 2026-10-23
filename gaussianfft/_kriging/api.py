@@ -1,9 +1,6 @@
-from gaussianfft._kriging.kriging_toolkit import (
-    GridSpec,
-    ObservationData,
-    OrdinaryKriging,
-    SimpleKriging,
-)
+from gaussianfft._kriging.grid_spec import GridSpec
+from gaussianfft._kriging.kriging_toolkit import OrdinaryKriging, SimpleKriging
+from gaussianfft._kriging.observation_data import ObservationData
 
 _METHODS = {
     'SimpleKriging': SimpleKriging,

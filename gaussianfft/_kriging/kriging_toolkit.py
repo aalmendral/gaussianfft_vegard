@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
 
 import numpy as np
 try:
@@ -11,6 +10,8 @@ except ImportError:
     raise ImportError("Scipy is not installed, and is required to use these utilities")
 
 import gaussianfft
+from gaussianfft._kriging.grid_spec import GridSpec
+from gaussianfft._kriging.observation_data import ObservationData
 
 class FactorizationError(ValueError):
     def __init__(self):
@@ -30,16 +31,6 @@ _MEMORY_BUDGET_BYTES = 10 * 1024 * 1024 * 1024  # 10 GB
 # ---------------------------------------------------------------------------
 # Module-level utilities
 # ---------------------------------------------------------------------------
-
-def _grid_coordinates(grid: GridSpec, ndims):
-    if len(grid.shape) != ndims:
-        raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
-    axes = [
-        origin + np.arange(size) * spacing
-        for size, spacing, origin in zip(grid.shape, grid.spacing, grid.origin)
-    ]
-    return np.stack(np.meshgrid(*axes, indexing='ij'), axis=-1).reshape(-1, ndims)
-
 
 def _build_obs_cov_matrix(variogram, obs_locations, obs_uncertainties):
     n = len(obs_locations)
@@ -98,91 +89,9 @@ def _simulate_uncond(variogram, grid: GridSpec):
     return np.asarray(raw).reshape(grid.shape, order='F')
 
 
-def _require_fitted(system):
-    if system is None:
-        raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
-    return system
-
-
 # ---------------------------------------------------------------------------
 # Kriging classes
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class GridSpec:
-    """Regular grid with axes in x, y, z order and an optional world-space origin."""
-
-    shape: tuple[int, ...]
-    spacing: tuple[float, ...]
-    origin: np.ndarray | None = None
-
-    def __post_init__(self):
-        self.shape = tuple(self.shape)
-        self.spacing = tuple(self.spacing)
-        if not 1 <= len(self.shape) <= 3:
-            raise ValueError("grid_shape must contain 1, 2, or 3 dimensions")
-        if len(self.spacing) != len(self.shape):
-            raise ValueError("grid_spacing must have the same length as grid_shape")
-        if any(
-            not isinstance(size, (int, np.integer))
-            or isinstance(size, (bool, np.bool_)) or size <= 0
-            for size in self.shape
-        ):
-            raise ValueError("grid_shape must contain positive integers")
-        if not np.all(np.isfinite(self.spacing)) or np.any(np.asarray(self.spacing) <= 0):
-            raise ValueError("grid_spacing must contain positive finite values")
-        self.origin = (
-            np.zeros(len(self.shape)) if self.origin is None
-            else np.array(self.origin, dtype=float, copy=True)
-        )
-        if self.origin.shape != (len(self.shape),) or not np.all(np.isfinite(self.origin)):
-            raise ValueError("origin must contain one finite value per grid dimension")
-
-
-@dataclass
-class ObservationData:
-    """Observation coordinates, values, and error standard deviations in field units."""
-
-    locations: np.ndarray
-    values: np.ndarray
-    uncertainties: np.ndarray
-
-    def __post_init__(self):
-        self.locations = np.array(self.locations, dtype=float, copy=True)
-        self.values = np.array(self.values, dtype=float, copy=True)
-        self.uncertainties = np.array(self.uncertainties, dtype=float, copy=True)
-        if self.locations.ndim != 2:
-            raise ValueError("obs_locations must be a 2D array")
-        if not 1 <= self.locations.shape[1] <= 3:
-            raise ValueError("obs_locations must have 1, 2, or 3 columns")
-        count = len(self.locations)
-        if count == 0:
-            raise ValueError("at least one observation is required")
-        if self.values.shape != (count,):
-            raise ValueError(f"obs_values must have shape ({count},), got {self.values.shape}")
-        if self.uncertainties.shape != (count,):
-            raise ValueError(
-                f"obs_uncertainties must have shape ({count},), got {self.uncertainties.shape}"
-            )
-        if not all(np.all(np.isfinite(array)) for array in (
-            self.locations, self.values, self.uncertainties,
-        )):
-            raise ValueError("observations must contain only finite values")
-        if np.any(self.uncertainties < 0):
-            raise ValueError("obs_uncertainties must be non-negative")
-
-
-class _ObservationSystem:
-    """Grid-independent observation snapshot and covariance factorization."""
-
-    def __init__(self, obs: ObservationData, variogram: gaussianfft.Variogram):
-        if not isinstance(variogram, gaussianfft.Variogram):
-            raise TypeError("variogram must be a gaussianfft.Variogram instance")
-        self.obs = ObservationData(obs.locations, obs.values, obs.uncertainties)
-        self.variogram = variogram
-        covariance = _build_obs_cov_matrix(variogram, self.obs.locations, self.obs.uncertainties)
-        self.factor = _cholesky_factor(covariance)
 
 
 class Kriging(abc.ABC):
@@ -216,32 +125,47 @@ class SimpleKriging(Kriging):
         self.mean = float(mean)
         if not np.isfinite(self.mean):
             raise ValueError("mean must be a finite scalar")
-        self._system = None
+        self._obs = None
+        self._variogram = None
+        self._cho_factor = None
 
     def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> SimpleKriging:
-        self._system = _ObservationSystem(obs, variogram)
+        obs = ObservationData(obs.locations, obs.values, obs.uncertainties)
+        covariance = _build_obs_cov_matrix(variogram, obs.locations, obs.uncertainties)
+        cho_factor = _cholesky_factor(covariance)
+        self._obs = obs
+        self._variogram = variogram
+        self._cho_factor = cho_factor
         return self
 
     def predict(
         self, grid: GridSpec, calculate_stddev=False,
     ) -> tuple[np.ndarray, np.ndarray | None]:
-        system = _require_fitted(self._system)
-        grid_coords = _grid_coordinates(grid, system.obs.locations.shape[1])
-        residuals = system.obs.values - self.mean
+        if self._obs is None:
+            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
+        obs = self._obs
+        if obs.locations.shape[1] != len(grid.shape):
+            raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        grid_coords = grid.coordinates()
+        residuals = obs.values - self.mean
         correction, stddev = self._krige(grid, grid_coords, residuals, calculate_stddev)
         correction += self.mean
         return correction, stddev
 
     def simulate(self, grid: GridSpec, n_sim=1) -> list[np.ndarray]:
-        system = _require_fitted(self._system)
-        grid_coords = _grid_coordinates(grid, system.obs.locations.shape[1])
-        obs_coords = _obs_interp_coords(system.obs.locations, grid)
+        if self._obs is None:
+            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
+        obs = self._obs
+        if obs.locations.shape[1] != len(grid.shape):
+            raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        grid_coords = grid.coordinates()
+        obs_coords = _obs_interp_coords(obs.locations, grid)
         results = []
 
         for _ in range(n_sim):
-            uncond = _simulate_uncond(system.variogram, grid)
+            uncond = _simulate_uncond(self._variogram, grid)
             uncond_at_obs = _interpolate_at_obs(uncond, obs_coords)
-            obs_residuals = (system.obs.values - self.mean) - uncond_at_obs
+            obs_residuals = (obs.values - self.mean) - uncond_at_obs
 
             correction, _ = self._krige(grid, grid_coords, obs_residuals)
             results.append(self.mean + uncond + correction)
@@ -249,21 +173,21 @@ class SimpleKriging(Kriging):
 
     def _krige(self, grid, grid_coords, residuals, calculate_stddev=False):
         """Apply simple kriging to mean-adjusted observation or simulation residuals."""
-        system = _require_fitted(self._system)
-        weights = scipy.linalg.cho_solve(system.factor, residuals)
+        obs = self._obs
+        weights = scipy.linalg.cho_solve(self._cho_factor, residuals)
         n_grid = len(grid_coords)
-        n_obs = len(system.obs.locations)
+        n_obs = len(obs.locations)
         chunk = _chunk_size(n_grid, n_obs)
         correction_flat = np.empty(n_grid)
         variance_flat = np.empty(n_grid) if calculate_stddev else None
         for start in range(0, n_grid, chunk):
             end = min(start + chunk, n_grid)
             cross_cov = _build_cross_cov_matrix(
-                system.variogram, grid_coords[start:end], system.obs.locations,
+                self._variogram, grid_coords[start:end], obs.locations,
             )
             correction_flat[start:end] = cross_cov @ weights
             if calculate_stddev:
-                alpha = scipy.linalg.cho_solve(system.factor, cross_cov.T)
+                alpha = scipy.linalg.cho_solve(self._cho_factor, cross_cov.T)
                 variance_flat[start:end] = 1.0 - np.sum(cross_cov * alpha.T, axis=1)
 
         correction = correction_flat.reshape(grid.shape)
@@ -293,46 +217,62 @@ class OrdinaryKriging(Kriging):
     """
 
     def __init__(self):
-        self._system = None
+        self._obs = None
+        self._variogram = None
+        self._cho_factor = None
         self._alpha = np.empty(0)
         self._s = 0.0
         self.estimated_mean = None
 
     def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> OrdinaryKriging:
-        system = _ObservationSystem(obs, variogram)
-        n_obs = len(system.obs.locations)
+        obs = ObservationData(obs.locations, obs.values, obs.uncertainties)
+        covariance = _build_obs_cov_matrix(variogram, obs.locations, obs.uncertainties)
+        cho_factor = _cholesky_factor(covariance)
+        n_obs = len(obs.locations)
         ones = np.ones(n_obs)
-        self._alpha = scipy.linalg.cho_solve(system.factor, ones)
-        self._s = float(self._alpha.sum())
-        gamma = scipy.linalg.cho_solve(system.factor, system.obs.values)
-        self.estimated_mean = float(gamma.sum() / self._s)
-        self._system = system
+        alpha = scipy.linalg.cho_solve(cho_factor, ones)
+        normalization = float(alpha.sum())
+        gamma = scipy.linalg.cho_solve(cho_factor, obs.values)
+        estimated_mean = float(gamma.sum() / normalization)
+        self._obs = obs
+        self._variogram = variogram
+        self._cho_factor = cho_factor
+        self._alpha = alpha
+        self._s = normalization
+        self.estimated_mean = estimated_mean
         return self
 
     def _ok_weights_chunk(self, cross_cov):
         """Return ordinary-kriging weights and drift for a cross-covariance chunk."""
-        system = _require_fitted(self._system)
-        beta = scipy.linalg.cho_solve(system.factor, cross_cov.T)
+        beta = scipy.linalg.cho_solve(self._cho_factor, cross_cov.T)
         drift = (self._alpha @ cross_cov.T - 1.0) / self._s
         return beta - np.outer(self._alpha, drift), drift
 
     def predict(
         self, grid: GridSpec, calculate_stddev=False,
     ) -> tuple[np.ndarray, np.ndarray | None]:
-        system = _require_fitted(self._system)
-        grid_coords = _grid_coordinates(grid, system.obs.locations.shape[1])
-        return self._krige(grid, grid_coords, system.obs.values, calculate_stddev)
+        if self._obs is None:
+            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
+        obs = self._obs
+        if obs.locations.shape[1] != len(grid.shape):
+            raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        grid_coords = grid.coordinates()
+        return self._krige(grid, grid_coords, obs.values, calculate_stddev)
 
     def simulate(self, grid: GridSpec, n_sim=1) -> list[np.ndarray]:
-        system = _require_fitted(self._system)
-        grid_coords = _grid_coordinates(grid, system.obs.locations.shape[1])
-        obs_coords = _obs_interp_coords(system.obs.locations, grid)
+        if self._obs is None:
+            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
+        obs = self._obs
+        if obs.locations.shape[1] != len(grid.shape):
+            raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        grid_coords = grid.coordinates()
+        obs_coords = _obs_interp_coords(obs.locations, grid)
         results = []
 
         for _ in range(n_sim):
-            uncond = _simulate_uncond(system.variogram, grid)
+            uncond = _simulate_uncond(self._variogram, grid)
             uncond_at_obs = _interpolate_at_obs(uncond, obs_coords)
-            obs_residuals = system.obs.values - uncond_at_obs
+            obs_residuals = obs.values - uncond_at_obs
 
             correction, _ = self._krige(grid, grid_coords, obs_residuals)
             results.append(uncond + correction)
@@ -340,16 +280,16 @@ class OrdinaryKriging(Kriging):
 
     def _krige(self, grid, grid_coords, residuals, calculate_stddev=False):
         """Apply ordinary kriging to observation values or simulation residuals."""
-        system = _require_fitted(self._system)
+        obs = self._obs
         n_grid = len(grid_coords)
-        n_obs = len(system.obs.locations)
+        n_obs = len(obs.locations)
         chunk = _chunk_size(n_grid, n_obs)
         correction_flat = np.empty(n_grid)
         variance_flat = np.empty(n_grid) if calculate_stddev else None
         for start in range(0, n_grid, chunk):
             end = min(start + chunk, n_grid)
             cross_cov = _build_cross_cov_matrix(
-                system.variogram, grid_coords[start:end], system.obs.locations,
+                self._variogram, grid_coords[start:end], obs.locations,
             )
             weights, drift = self._ok_weights_chunk(cross_cov)
             correction_flat[start:end] = weights.T @ residuals

@@ -1,5 +1,7 @@
 from .api import predict, simulate
-from .kriging_toolkit import GridSpec, Kriging, ObservationData, OrdinaryKriging, SimpleKriging
+from .grid_spec import GridSpec
+from .kriging_toolkit import Kriging, OrdinaryKriging, SimpleKriging
+from .observation_data import ObservationData
 
 __all__ = [
 	'predict', 'simulate', 'GridSpec', 'ObservationData', 'Kriging',
