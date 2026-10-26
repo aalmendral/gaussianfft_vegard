@@ -21,46 +21,6 @@ variogram = grf.variogram(grf.VariogramType.GAUSSIAN, 1000)
 simulation = grf.simulate(variogram, nx=100, dx=1, ny=100, dy=1)  # 2D 100 x 100 grid
 ```
 
-### Kriging
-
-Install `gaussianfft[kriging]` to include SciPy. A fitted estimator can be reused
-for prediction and conditional simulation on different grids:
-
-```python
-import numpy as np
-import gaussianfft as grf
-from gaussianfft._kriging import GridSpec, ObservationData, SimpleKriging
-
-variogram = grf.variogram('exponential', 100.0, 50.0)
-observations = ObservationData(
-   locations=np.array([[20.0, 30.0], [60.0, 50.0]]),
-   values=np.array([1.0, -0.5]),
-   uncertainties=np.zeros(2),
-)
-grid = GridSpec(shape=(100, 80), spacing=(2.0, 2.0))
-model = SimpleKriging(mean=0.0)
-model.fit(observations, variogram)
-prediction, stddev = model.predict(grid, calculate_stddev=True)
-grf.seed(42)
-realizations = model.simulate(grid, n_sim=3)
-```
-
-`fit` takes an already-configured `gaussianfft.Variogram`; it does not estimate
-variogram parameters and returns `None`. Construct the estimator before calling
-`fit`. `OrdinaryKriging` estimates an unknown constant mean during `fit`, available
-as `estimated_mean` afterwards.
-Both classes implement the `Kriging` ABC and directly store their observation
-data, variogram, and Cholesky factor. They retain the supplied observation data and reuse the factor
-across predictions and simulations. Call `fit` again to use changed observations,
-uncertainties, or variogram parameters.
-
-`GridSpec` uses x, y, z axis order and accepts an optional `origin` (zero by
-default). Results retain its exact shape, including singleton axes. Prediction
-allows observations outside the target grid; simulation requires all observation
-locations to lie within the grid's node bounds. Simple kriging supports only a
-constant scalar mean. `predict` always returns `(field, stddev)`, with `stddev=None`
-unless requested; `simulate` returns a list of fields. The tuple-grid convenience
-functions `grf.predict` and `grf.conditional_simulate` remain available.
 
 ### Examples
 
