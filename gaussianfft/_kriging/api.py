@@ -1,30 +1,29 @@
+from typing import Literal
+
 from gaussianfft._kriging.grid_spec import GridSpec
 from gaussianfft._kriging.kriging_toolkit import OrdinaryKriging, SimpleKriging
 from gaussianfft._kriging.observation_data import ObservationData
 
-_METHODS = {
-    'SimpleKriging': SimpleKriging,
-    'OrdinaryKriging': OrdinaryKriging,
-}
+
+KrigingType = Literal["simple", "ordinary"]
 
 
-def _build_kriging(method, mean):
-    cls = _METHODS.get(method)
-    if cls is None:
-        raise ValueError(
-            f"Unknown kriging method: {method!r}. Choose from {list(_METHODS)}"
-        )
-    if method == 'SimpleKriging':
-        estimator = cls(mean=mean)
+def _build_kriging(method: KrigingType, mean: float):
+    if method == 'simple':
+        estimator = SimpleKriging(mean=mean)
+    elif method == 'ordinary':
+        estimator = OrdinaryKriging()
     else:
-        estimator = cls()
+        raise ValueError(
+            f"Unknown kriging method: {method!r}. Choose from 'simple' or 'ordinary'"
+        )
     return estimator
 
 
 def predict(
         variogram, grid_shape: tuple[int, ...], grid_spacing: tuple[float, ...],
         obs_locations, obs_values, obs_uncertainties, *,
-        method='SimpleKriging', mean: float = 0.0, calculate_stddev=False,
+        method: KrigingType = 'simple', mean: float = 0.0, calculate_stddev=False,
 ):
     """Predict on a grid defined by shape and spacing tuples in x, y, z order."""
     grid = GridSpec(grid_shape, grid_spacing)
@@ -36,7 +35,7 @@ def predict(
 def simulate(
         variogram, grid_shape: tuple[int, ...], grid_spacing: tuple[float, ...],
         obs_locations, obs_values, obs_uncertainties, *,
-        method='SimpleKriging', mean: float = 0.0, n_sim=1,
+        method: KrigingType = 'simple', mean: float = 0.0, n_sim=1,
 ):
     """Simulate on a grid defined by shape and spacing tuples in x, y, z order."""
     grid = GridSpec(grid_shape, grid_spacing)

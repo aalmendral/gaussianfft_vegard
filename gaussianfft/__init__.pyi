@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Collection, Iterable, Optional, Union, overload
 
 from numpy import ndarray
+from gaussianfft._kriging.api import KrigingType
 
 import advanced
 
@@ -273,7 +274,7 @@ def conditional_simulate(
         mean: float = 0.0,
         n: int = 1,
         seed: Optional[int] = None,
-        method: str = 'SimpleKriging',
+        method: KrigingType = 'simple',
 ) -> list[ndarray]:
     """
 Generates conditional Gaussian random field realizations using the selected kriging method.
@@ -293,11 +294,13 @@ obs_values: ndarray
 obs_uncertainties: ndarray
     Array of shape (N,) with observation uncertainties (standard deviations).
 mean: float, optional
-    Constant prior mean of the field (SimpleKriging only). Default is 0.0.
+    Constant prior mean of the field (simple kriging only). Default is 0.0.
 n: int, optional
     Number of realizations to generate. Default is 1.
 seed: int, optional
     Random seed. Sets the global seed before simulation. Default is None (no change).
+method: {'simple', 'ordinary'}, optional
+    Kriging method. Default is 'simple'.
 
 Returns
 -------
@@ -322,7 +325,7 @@ def predict(
         obs_uncertainties: ndarray,
         *,
         mean: float = 0.0,
-        method: str = 'SimpleKriging',
+        method: KrigingType = 'simple',
         calculate_stddev: bool = False,
 ) -> tuple[ndarray, Optional[ndarray]]:
     """
@@ -343,9 +346,9 @@ obs_values: ndarray
 obs_uncertainties: ndarray
     Array of shape (N,) with observation uncertainties (standard deviations).
 mean: float, optional
-    Constant prior mean of the field (SimpleKriging only). Default is 0.0.
-method: str, optional
-    Kriging method. One of 'SimpleKriging' (default) or 'OrdinaryKriging'.
+    Constant prior mean of the field (simple kriging only). Default is 0.0.
+method: {'simple', 'ordinary'}, optional
+    Kriging method. Default is 'simple'.
 calculate_stddev: bool, optional
     Whether to calculate the standard deviation. Default is False.
 

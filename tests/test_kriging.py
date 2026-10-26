@@ -318,7 +318,7 @@ class TestOrdinaryKriging1D:
         return predict(
             self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
-            method='OrdinaryKriging', **kwargs,
+            method='ordinary', **kwargs,
         )
 
     def test_exact_interpolation_zero_uncertainty(self):
@@ -375,7 +375,7 @@ class TestOrdinaryKriging1D:
         sims = grf.conditional_simulate(
             self.variogram, (self.nx,), (self.dx,),
             obs_locations, obs_values, obs_uncertainties,
-            n=50, method='OrdinaryKriging',
+            n=50, method='ordinary',
         )
 
         assert len(sims) == 50
@@ -412,7 +412,7 @@ class TestOrdinaryKriging2D:
         mean_field, _ = predict(
             self.variogram, (self.nx, self.ny), (self.dx, self.dy),
             obs_locations, obs_values, obs_uncertainties,
-            method='OrdinaryKriging',
+            method='ordinary',
         )
 
         assert mean_field.shape == (self.nx, self.ny)
@@ -438,25 +438,34 @@ class TestMethodDispatch:
         return (self.variogram, (self.nx,), (self.dx,),
                 self.obs_locations, self.obs_values, self.obs_uncertainties)
 
-    def test_default_is_simple_kriging(self):
-        mean_default, _ = predict(*self._args())
-        mean_sk, _ = predict(*self._args(), method='SimpleKriging')
+    @pytest.mark.parametrize("predict_fn", [predict, grf.predict])
+    def test_default_is_simple_kriging(self, predict_fn):
+        mean_default, _ = predict_fn(*self._args())
+        mean_sk, _ = predict_fn(*self._args(), method='simple')
         np.testing.assert_array_equal(mean_default, mean_sk)
 
-    def test_ok_and_sk_differ(self):
-        mean_sk, _ = predict(*self._args(), method='SimpleKriging')
-        mean_ok, _ = predict(*self._args(), method='OrdinaryKriging')
+    @pytest.mark.parametrize("predict_fn", [predict, grf.predict])
+    def test_ok_and_sk_differ(self, predict_fn):
+        mean_sk, _ = predict_fn(*self._args(), method='simple')
+        mean_ok, _ = predict_fn(*self._args(), method='ordinary')
         # SK and OK should generally differ (different assumptions about the mean)
         assert not np.allclose(mean_sk, mean_ok)
 
-    def test_invalid_method_raises(self):
+    @pytest.mark.parametrize("method", ['UnknownMethod', 'SimpleKriging', 'OrdinaryKriging'])
+    @pytest.mark.parametrize("kriging_fn", [predict, grf.predict, grf.conditional_simulate])
+    def test_invalid_method_raises(self, method, kriging_fn):
         with pytest.raises(ValueError, match="Unknown kriging method"):
-            predict(*self._args(), method='UnknownMethod')
+            kriging_fn(*self._args(), method=method)
+
+    def test_conditional_simulate_default_is_simple_kriging(self):
+        sims_default = grf.conditional_simulate(*self._args(), n=5, seed=0)
+        sims_sk = grf.conditional_simulate(*self._args(), n=5, seed=0, method='simple')
+        np.testing.assert_array_equal(sims_default, sims_sk)
 
     def test_conditional_simulate_method_dispatch(self):
         grf.seed(0)
-        sims_sk = grf.conditional_simulate(*self._args(), n=5, method='SimpleKriging')
+        sims_sk = grf.conditional_simulate(*self._args(), n=5, method='simple')
         grf.seed(0)
-        sims_ok = grf.conditional_simulate(*self._args(), n=5, method='OrdinaryKriging')
+        sims_ok = grf.conditional_simulate(*self._args(), n=5, method='ordinary')
         # Results from different methods should differ
         assert not np.allclose(sims_sk[0], sims_ok[0])
