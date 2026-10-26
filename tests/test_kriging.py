@@ -9,7 +9,7 @@ if platform.python_implementation() == 'PyPy':
     pytest.skip('Kriging requires SciPy, which is unavailable on PyPy', allow_module_level=True)
 
 import gaussianfft as grf
-from gaussianfft._kriging import ObservationData, OrdinaryKriging, predict
+from gaussianfft._kriging import ObservationData, OrdinaryKriging, Variogram, predict
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +394,7 @@ class TestOrdinaryKriging1D:
 
         obs = ObservationData(obs_locations, obs_values, obs_uncertainties)
         ok = OrdinaryKriging()
-        ok.predict(GridSpec((self.nx,), (self.dx,)), obs, self.variogram)
+        ok.predict(GridSpec((self.nx,), (self.dx,)), obs, Variogram(self.variogram))
 
         assert abs(ok.estimated_mean - 4.0) < 1e-6
 
