@@ -8,7 +8,7 @@ _METHODS = {
 }
 
 
-def _build_kriging(method, obs, variogram, mean):
+def _build_kriging(method, mean):
     cls = _METHODS.get(method)
     if cls is None:
         raise ValueError(
@@ -18,7 +18,6 @@ def _build_kriging(method, obs, variogram, mean):
         estimator = cls(mean=mean)
     else:
         estimator = cls()
-    estimator.fit(obs, variogram)
     return estimator
 
 
@@ -30,8 +29,8 @@ def predict(
     """Predict on a grid defined by shape and spacing tuples in x, y, z order."""
     grid = GridSpec(grid_shape, grid_spacing)
     obs = ObservationData(obs_locations, obs_values, obs_uncertainties)
-    estimator = _build_kriging(method, obs, variogram, mean)
-    return estimator.predict(grid, calculate_stddev=calculate_stddev)
+    estimator = _build_kriging(method, mean)
+    return estimator.predict(grid, obs, variogram, calculate_stddev=calculate_stddev)
 
 
 def simulate(
@@ -42,5 +41,5 @@ def simulate(
     """Simulate on a grid defined by shape and spacing tuples in x, y, z order."""
     grid = GridSpec(grid_shape, grid_spacing)
     obs = ObservationData(obs_locations, obs_values, obs_uncertainties)
-    estimator = _build_kriging(method, obs, variogram, mean)
-    return estimator.simulate(grid, n_sim=n_sim)
+    estimator = _build_kriging(method, mean)
+    return estimator.simulate(grid, obs, variogram, n_sim=n_sim)

@@ -29,15 +29,14 @@ def main():
     grid = GridSpec((nx, ny), (dx, dy))
     obs = ObservationData(obs_pt, obs_val, obs_unc)
     ok = OrdinaryKriging()
-    ok.fit(obs, variogram)
-    pred_mean, pred_std = ok.predict(grid, calculate_stddev=True)
+    pred_mean, pred_std = ok.predict(grid, obs, variogram, calculate_stddev=True)
     estimated_mean = ok.estimated_mean
 
     # Two conditional simulations
     grf.seed(42)
-    sim_a = ok.simulate(grid)[0]
+    sim_a = ok.simulate(grid, obs, variogram)[0]
     grf.seed(123)
-    sim_b = ok.simulate(grid)[0]
+    sim_b = ok.simulate(grid, obs, variogram)[0]
 
     # Cross-section: diagonal line through first two observations
     p0 = obs_pt[0]

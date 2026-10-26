@@ -95,24 +95,20 @@ def _simulate_uncond(variogram, grid: GridSpec):
 
 
 class Kriging(abc.ABC):
-    """Kriging interface allowing preparation to be deferred until evaluation."""
-
-    @abc.abstractmethod
-    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
-        """Accept observations and a configured variogram.
-
-        Preparation may be deferred. Refit after changing the variogram; no
-        variogram parameters are estimated by this interface.
-        """
+    """Kriging interface accepting observations and a variogram per operation."""
 
     @abc.abstractmethod
     def predict(
-        self, grid: GridSpec, calculate_stddev=False,
+        self, grid: GridSpec, obs: ObservationData, variogram: gaussianfft.Variogram,
+        calculate_stddev=False,
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """Return a grid-shaped prediction and optional standard deviation."""
 
     @abc.abstractmethod
-    def simulate(self, grid: GridSpec, n_sim=1) -> list[np.ndarray]:
+    def simulate(
+        self, grid: GridSpec, obs: ObservationData, variogram: gaussianfft.Variogram,
+        n_sim=1,
+    ) -> list[np.ndarray]:
         """Generate conditional fields on a grid covering all observation locations."""
 
 
@@ -125,7 +121,7 @@ class SimpleKriging(Kriging):
         self._variogram = None
         self._cho_factor = None
 
-    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
+    def _initialize(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
         covariance = _build_obs_cov_matrix(variogram, obs.locations, obs.uncertainties)
         cho_factor = _cholesky_factor(covariance)
         self._obs = obs
@@ -133,25 +129,25 @@ class SimpleKriging(Kriging):
         self._cho_factor = cho_factor
 
     def predict(
-        self, grid: GridSpec, calculate_stddev=False,
+        self, grid: GridSpec, obs: ObservationData, variogram: gaussianfft.Variogram,
+        calculate_stddev=False,
     ) -> tuple[np.ndarray, np.ndarray | None]:
-        if self._obs is None:
-            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
-        obs = self._obs
         if obs.locations.shape[1] != len(grid.shape):
             raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        self._initialize(obs, variogram)
         grid_coords = grid.coordinates()
         residuals = obs.values - self.mean
         correction, stddev = self._krige(grid.shape, grid_coords, residuals, calculate_stddev)
         correction += self.mean
         return correction, stddev
 
-    def simulate(self, grid: GridSpec, n_sim=1) -> list[np.ndarray]:
-        if self._obs is None:
-            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
-        obs = self._obs
+    def simulate(
+        self, grid: GridSpec, obs: ObservationData, variogram: gaussianfft.Variogram,
+        n_sim=1,
+    ) -> list[np.ndarray]:
         if obs.locations.shape[1] != len(grid.shape):
             raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        self._initialize(obs, variogram)
         grid_coords = grid.coordinates()
         obs_coords = _obs_interp_coords(obs.locations, grid)
         results = []
@@ -192,12 +188,12 @@ class SimpleKriging(Kriging):
 
 
 class OrdinaryKriging(Kriging):
-    """Ordinary kriging with an unknown constant mean estimated during fit.
+    """Ordinary kriging with an unknown constant mean estimated per operation.
 
     The unbiasedness constraint (weights sum to 1) is enforced via a Lagrange
     multiplier.  Weights and drift coefficient are computed on-the-fly in
     chunks via the Schur complement of C, using only the Cholesky factor of C.
-    Beyond the covariance factor, only O(n_obs) scalars are stored after fit::
+    Beyond the covariance factor, only O(n_obs) scalars are stored after initialization::
 
         alpha  = C^{-1} 1                          (n_obs,)  stored
         s      = 1^T alpha                          scalar    stored
@@ -218,7 +214,7 @@ class OrdinaryKriging(Kriging):
         self._s = 0.0
         self.estimated_mean = None
 
-    def fit(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
+    def _initialize(self, obs: ObservationData, variogram: gaussianfft.Variogram) -> None:
         covariance = _build_obs_cov_matrix(variogram, obs.locations, obs.uncertainties)
         cho_factor = _cholesky_factor(covariance)
         n_obs = len(obs.locations)
@@ -241,22 +237,22 @@ class OrdinaryKriging(Kriging):
         return beta - np.outer(self._alpha, drift), drift
 
     def predict(
-        self, grid: GridSpec, calculate_stddev=False,
+        self, grid: GridSpec, obs: ObservationData, variogram: gaussianfft.Variogram,
+        calculate_stddev=False,
     ) -> tuple[np.ndarray, np.ndarray | None]:
-        if self._obs is None:
-            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
-        obs = self._obs
         if obs.locations.shape[1] != len(grid.shape):
             raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        self._initialize(obs, variogram)
         grid_coords = grid.coordinates()
         return self._krige(grid.shape, grid_coords, obs.values, calculate_stddev)
 
-    def simulate(self, grid: GridSpec, n_sim=1) -> list[np.ndarray]:
-        if self._obs is None:
-            raise RuntimeError("Call fit(obs, variogram) before predict or simulate")
-        obs = self._obs
+    def simulate(
+        self, grid: GridSpec, obs: ObservationData, variogram: gaussianfft.Variogram,
+        n_sim=1,
+    ) -> list[np.ndarray]:
         if obs.locations.shape[1] != len(grid.shape):
             raise ValueError(f"obs_locations must have {len(grid.shape)} columns for this grid")
+        self._initialize(obs, variogram)
         grid_coords = grid.coordinates()
         obs_coords = _obs_interp_coords(obs.locations, grid)
         results = []
